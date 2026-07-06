@@ -3,7 +3,7 @@
   "name": "Rebar Parameter Colorizer",
   "version": "1.0.0",
   "description": "Colors rebar based on parameter values",
-  "homepage": "https://https://github.com/ClosedSlot/trimble-rebar-extension",
+  "homepage": "https://github.com/ClosedSlot/trimble-rebar-extension",
   "entryPoints": [
     {
       "type": "viewer-panel",
