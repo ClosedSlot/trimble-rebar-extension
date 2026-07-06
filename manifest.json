@@ -1,16 +1,7 @@
 {
-  "id": "com.mycompany.rebarcolorizer",
-  "name": "Rebar Parameter Colorizer",
-  "version": "1.0.0",
+  "title": "Rebar Parameter Colorizer",
+  "url": "https://closedslot.github.io/trimble-rebar-extension/index.html",
   "description": "Colors rebar based on parameter values",
-  "homepage": "https://github.com/closedslot/trimble-rebar-extension",
-  "entryPoints": [
-    {
-      "type": "viewer-panel",
-      "id": "rebar-panel",
-      "name": "Rebar Colorizer",
-      "url": "https://closedslot.github.io/trimble-rebar-extension/index.html",
-      "icon": "https://img.icons8.com/ios-filled/50/000000/color-palette.png"
-    }
-  ]
+  "icon": "https://img.icons8.com/ios-filled/50/000000/color-palette.png",
+  "enabled": true
 }
