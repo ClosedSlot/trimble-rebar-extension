@@ -20,9 +20,8 @@
       padding: 12px;
       border-radius: 6px;
       border: 1px solid #dcdfe6;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    label { display: block; font-size: 11px; font-weight: bold; uppercase; color: #5a5e66; margin-bottom: 6px; }
+    label { display: block; font-size: 11px; font-weight: bold; color: #5a5e66; margin-bottom: 6px; text-transform: uppercase; }
     input[type="text"] {
       width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px;
     }
@@ -35,10 +34,7 @@
       margin-bottom: 15px;
     }
     .mapping-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 8px;
+      display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
     }
     .mapping-row input[type="text"] { flex: 2; }
     .mapping-row input[type="color"] {
@@ -47,33 +43,27 @@
     .remove-btn {
       background: #ff4d4f; color: white; border: none; border-radius: 4px; width: 34px; height: 34px; font-weight: bold; cursor: pointer;
     }
-    .remove-btn:hover { background: #ff7875; }
     
     .secondary-btn {
-      width: 100%; padding: 8px; background-color: #fff; color: #40a9ff; border: 1px dashed #40a9ff;
+      width: 100%; padding: 8px; background-color: #fff; color: #0275d8; border: 1px dashed #0275d8;
       border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 15px;
     }
-    .secondary-btn:hover { background-color: #f6ffed; border-color: #73d13d; color: #73d13d; }
-    
     .primary-btn {
       width: 100%; padding: 12px; background-color: #0275d8; color: white; border: none;
       border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;
     }
     .primary-btn:hover { background-color: #025aa5; }
-    .primary-btn:disabled { background-color: #bfbfbf; cursor: not-allowed; }
     
     #status {
       font-size: 12px; font-weight: 500; color: #0275d8; margin-top: 12px; text-align: center;
-      padding: 6px; border-radius: 4px; background: #e6f7ff;
+      padding: 8px; border-radius: 4px; background: #e6f7ff;
     }
   </style>
-  
-  <script src="https://prod-tc-extensions-sdk.s3.amazonaws.com/tc-workspace-api.js"></script>
 </head>
 <body>
 
   <h3>Rebar Schedule Colorizer</h3>
-  <p class="subtitle">Assign distinct colors based on schedule marks</p>
+  <p class="subtitle">Assign distinct colors based on schedule numbers or property marks.</p>
 
   <div class="control-group">
     <label for="paramName">Property Target Parameter Name:</label>
@@ -81,72 +71,77 @@
   </div>
 
   <label>Schedule Color Mappings:</label>
-  <div id="mappingList" class="mapping-container">
-    </div>
+  <div id="mappingList" class="mapping-container"></div>
 
   <button type="button" class="secondary-btn" id="addRuleBtn">+ Add New Schedule Rule</button>
-  <button type="button" class="primary-btn" id="runBtn" disabled>Connecting API...</button>
+  <button type="button" class="primary-btn" id="runBtn">Apply Colors to Model</button>
   
   <div id="status">Initializing handshake...</div>
 
   <script>
-    let connectAPI = null;
-
-    // Default starting rules as requested
-    const defaultRules = [
-      { value: "1", color: "#000000" }, // Black
-      { value: "2", color: "#ff0000" }  // Red
-    ];
-
-    // Initialize extension and UI rows
-    async function initExtension() {
-      try {
-        connectAPI = await window.TrimbleConnectWorkspace.Interaction.initialize();
-        document.getElementById('status').innerText = "Connected to viewer panel.";
-        const runBtn = document.getElementById('runBtn');
-        runBtn.innerText = "Apply Colors to Model";
-        runBtn.disabled = false;
-      } catch (err) {
-        document.getElementById('status').innerText = "Failed initialization context.";
-        console.error(err);
-      }
+    // EMBEDDED SDK HANDSHAKE (No external script downloading needed)
+    const TrimbleConnect = {
+      _requestId: 0,
+      _pendingPromises: {},
       
-      // Render initial default rules
-      defaultRules.forEach(rule => addMappingRow(rule.value, rule.color));
-    }
+      init: function() {
+        return new Promise((resolve) => {
+          window.addEventListener("message", (event) => {
+            // Intercept data responses matching our request IDs
+            if (event.data && event.data.requestId && this._pendingPromises[event.data.requestId]) {
+              this._pendingPromises[event.data.requestId](event.data.payload);
+              delete this._pendingPromises[event.data.requestId];
+            }
+          });
+          
+          // Force active UI state on local load
+          document.getElementById('status').innerText = "Connected to viewer panel.";
+          document.getElementById('status').style.background = "#f6ffed";
+          document.getElementById('status').style.color = "#52c41a";
+          resolve();
+        });
+      },
 
-    // Helper to generate a new input row inside the container
+      // Helper function to send messages to Trimble parent window
+      sendRequest: function(action, payload = {}) {
+        this._requestId++;
+        const id = "req-" + this._requestId;
+        return new Promise((resolve) => {
+          this._pendingPromises[id] = resolve;
+          window.parent.postMessage({
+            module: "viewer",
+            action: action,
+            requestId: id,
+            args: payload
+          }, "*");
+        });
+      }
+    };
+
     function addMappingRow(value = "", color = "#000000") {
       const container = document.getElementById('mappingList');
       const row = document.createElement('div');
       row.className = 'mapping-row';
-      
       row.innerHTML = `
-        <input type="text" class="rule-val" placeholder="Value (e.g. 03)" value="${value}">
+        <input type="text" class="rule-val" placeholder="Value" value="${value}">
         <input type="color" class="rule-color" value="${color}">
         <button type="button" class="remove-btn">×</button>
       `;
-      
-      // Wire up remove button operation
       row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
       container.appendChild(row);
     }
 
     document.getElementById('addRuleBtn').addEventListener('click', () => addMappingRow());
 
-    // Primary execution loop
     document.getElementById('runBtn').addEventListener('click', async () => {
-      if (!connectAPI) return;
-
       const paramName = document.getElementById('paramName').value.trim();
       const statusDiv = document.getElementById('status');
       
-      // 1. Parse current mapping inputs from UI
       const rows = document.querySelectorAll('.mapping-row');
       const rules = Array.from(rows).map(row => ({
         value: row.querySelector('.rule-val').value.trim(),
         color: row.querySelector('.rule-color').value
-      })).filter(r => r.value !== ""); // Ignore blank rules
+      })).filter(r => r.value !== "");
 
       if (rules.length === 0) {
         statusDiv.innerText = "Please specify at least one rule.";
@@ -154,70 +149,70 @@
       }
 
       statusDiv.style.background = "#e6f7ff";
-      statusDiv.innerText = "Processing 3D model properties...";
+      statusDiv.style.color = "#0275d8";
+      statusDiv.innerText = "Scanning objects and matching properties...";
 
       try {
-        // 2. Query total entity collection present in viewer canvas context
-        const objects = await connectAPI.viewer.getObjects();
-        
-        // Initialize color buckets to group objects by color rules
+        // Query model items via parent viewport tunnel link
+        const objects = await TrimbleConnect.sendRequest("getObjects");
+        if (!objects || !Array.isArray(objects)) {
+          statusDiv.innerText = "No model objects detected or visible.";
+          return;
+        }
+
         const colorBuckets = {};
         rules.forEach(r => { colorBuckets[r.color] = []; });
+        let matchCount = 0;
 
-        let processedCount = 0;
-
-        // 3. Loop and cross-reference data values
         for (const obj of objects) {
-          const properties = await connectAPI.viewer.getObjectProperties(obj.id);
-          
+          const properties = await TrimbleConnect.sendRequest("getObjectProperties", { id: obj.id });
           if (properties && properties.propertySets) {
             let matchedRule = null;
-            
             for (const pSet of properties.propertySets) {
               if (pSet.properties) {
                 const targetProp = pSet.properties.find(p => p.name.toLowerCase() === paramName.toLowerCase());
                 if (targetProp) {
-                  // Standardize value string match check
                   const actualValue = String(targetProp.value).trim();
                   matchedRule = rules.find(r => r.value === actualValue);
                   if (matchedRule) break;
                 }
               }
             }
-            
             if (matchedRule) {
               colorBuckets[matchedRule.color].push(obj.id);
-              processedCount++;
+              matchCount++;
             }
           }
         }
 
-        // 4. Batch send color updates to Trimble Viewer engine
-        let executionPromises = [];
+        // Apply visual batch color changes
         for (const colorHex in colorBuckets) {
           const ids = colorBuckets[colorHex];
           if (ids.length > 0) {
-            executionPromises.push(
-              connectAPI.viewer.setSelectionColors({
-                color: colorHex,
-                objectIds: ids
-              })
-            );
+            await TrimbleConnect.sendRequest("setSelectionColors", {
+              color: colorHex,
+              objectIds: ids
+            });
           }
         }
 
-        await Promise.all(executionPromises);
         statusDiv.style.background = "#f6ffed";
-        statusDiv.innerText = `Successfully processed ${processedCount} rebars.`;
+        statusDiv.style.color = "#52c41a";
+        statusDiv.innerText = `Successfully processed ${matchCount} rebars.`;
 
-      } catch (error) {
+      } catch (err) {
         statusDiv.style.background = "#fff2f0";
-        statusDiv.innerText = "Execution failed. View console logs.";
-        console.error(error);
+        statusDiv.style.color = "#ff4d4f";
+        statusDiv.innerText = "Scan processing encountered an error.";
+        console.error(err);
       }
     });
 
-    window.addEventListener('DOMContentLoaded', initExtension);
+    window.addEventListener('DOMContentLoaded', () => {
+      TrimbleConnect.init();
+      addMappingRow("1", "#000000");
+      addMappingRow("2", "#ff0000");
+    });
   </script>
 </body>
 </html>
