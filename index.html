@@ -2,133 +2,221 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rebar Colorizer Extension</title>
+  <title>Rebar Schedule Colorizer</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       padding: 15px;
       margin: 0;
-      background-color: #f9f9f9;
+      background-color: #f4f5f7;
       color: #333;
     }
-    h3 { margin-top: 0; font-size: 16px; color: #111; }
+    h3 { margin-top: 0; font-size: 16px; color: #111; margin-bottom: 5px; }
+    p.subtitle { font-size: 12px; color: #666; margin-bottom: 15px; }
+    
     .control-group {
-      margin-bottom: 12px;
+      margin-bottom: 15px;
       background: white;
-      padding: 10px;
+      padding: 12px;
       border-radius: 6px;
-      border: 1px solid #ddd;
+      border: 1px solid #dcdfe6;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; }
-    input[type="text"], input[type="color"] {
-      width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #ccc; border-radius: 4px;
+    label { display: block; font-size: 11px; font-weight: bold; uppercase; color: #5a5e66; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px;
     }
-    input[type="color"] { height: 35px; cursor: pointer; padding: 2px; }
-    button {
-      width: 100%; padding: 10px; background-color: #0275d8; color: white; border: none;
-      border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 5px;
+    
+    .mapping-container {
+      background: white;
+      border: 1px solid #dcdfe6;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 15px;
     }
-    button:hover { background-color: #025aa5; }
-    #status { font-size: 12px; color: #666; margin-top: 10px; text-align: center; }
+    .mapping-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .mapping-row input[type="text"] { flex: 2; }
+    .mapping-row input[type="color"] {
+      flex: 1; height: 34px; padding: 2px; border: 1px solid #dcdfe6; border-radius: 4px; cursor: pointer;
+    }
+    .remove-btn {
+      background: #ff4d4f; color: white; border: none; border-radius: 4px; width: 34px; height: 34px; font-weight: bold; cursor: pointer;
+    }
+    .remove-btn:hover { background: #ff7875; }
+    
+    .secondary-btn {
+      width: 100%; padding: 8px; background-color: #fff; color: #40a9ff; border: 1px dashed #40a9ff;
+      border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 15px;
+    }
+    .secondary-btn:hover { background-color: #f6ffed; border-color: #73d13d; color: #73d13d; }
+    
+    .primary-btn {
+      width: 100%; padding: 12px; background-color: #0275d8; color: white; border: none;
+      border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;
+    }
+    .primary-btn:hover { background-color: #025aa5; }
+    .primary-btn:disabled { background-color: #bfbfbf; cursor: not-allowed; }
+    
+    #status {
+      font-size: 12px; font-weight: 500; color: #0275d8; margin-top: 12px; text-align: center;
+      padding: 6px; border-radius: 4px; background: #e6f7ff;
+    }
   </style>
   
   <script src="https://workspace-api.connect.trimble.com/v1/trimble.connect.workspace-api.js"></script>
 </head>
 <body>
 
-  <h3>Rebar Colorizer</h3>
-  <p style="font-size: 12px; color: #555;">Color elements matching specific parameter values.</p>
+  <h3>Rebar Schedule Colorizer</h3>
+  <p class="subtitle">Assign distinct colors based on schedule numbers or property marks.</p>
 
   <div class="control-group">
-    <label for="paramName">Parameter Name to Scan:</label>
-    <input type="text" id="paramName" value="Size">
+    <label for="paramName">Property Target Parameter Name:</label>
+    <input type="text" id="paramName" value="Schedule Number">
   </div>
 
-  <div class="control-group">
-    <label for="targetValue">Target Value (e.g., #16 or 16mm):</label>
-    <input type="text" id="targetValue" value="#16">
-  </div>
+  <label>Schedule Color Mappings:</label>
+  <div id="mappingList" class="mapping-container">
+    </div>
 
-  <div class="control-group">
-    <label for="colorPicker">Color to Apply:</label>
-    <input type="color" id="colorPicker" value="#ff0000">
-  </div>
-
-  <button id="runBtn">Scan & Colorize</button>
-  <div id="status">Ready</div>
+  <button type="button" class="secondary-btn" id="addRuleBtn">+ Add New Schedule Rule</button>
+  <button type="button" class="primary-btn" id="runBtn" disabled>Connecting API...</button>
+  
+  <div id="status">Initializing handshake...</div>
 
   <script>
     let connectAPI = null;
 
-    // Initialize Trimble Connect workspace interaction handshake
+    // Default starting rules as requested
+    const defaultRules = [
+      { value: "01", color: "#000000" }, // Black
+      { value: "02", color: "#ff0000" }  // Red
+    ];
+
+    // Initialize extension and UI rows
     async function initExtension() {
       try {
-        document.getElementById('status').innerText = "Connecting to Trimble Connect...";
         connectAPI = await window.TrimbleConnectWorkspace.Interaction.initialize();
-        document.getElementById('status').innerText = "Connected to viewer.";
+        document.getElementById('status').innerText = "Connected to viewer panel.";
+        const runBtn = document.getElementById('runBtn');
+        runBtn.innerText = "Apply Colors to Model";
+        runBtn.disabled = false;
       } catch (err) {
-        document.getElementById('status').innerText = "Failed to connect to host application.";
+        document.getElementById('status').innerText = "Failed initialization context.";
         console.error(err);
       }
+      
+      // Render initial default rules
+      defaultRules.forEach(rule => addMappingRow(rule.value, rule.color));
     }
 
+    // Helper to generate a new input row inside the container
+    function addMappingRow(value = "", color = "#000000") {
+      const container = document.getElementById('mappingList');
+      const row = document.createElement('div');
+      row.className = 'mapping-row';
+      
+      row.innerHTML = `
+        <input type="text" class="rule-val" placeholder="Value (e.g. 03)" value="${value}">
+        <input type="color" class="rule-color" value="${color}">
+        <button type="button" class="remove-btn">×</button>
+      `;
+      
+      // Wire up remove button operation
+      row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+      container.appendChild(row);
+    }
+
+    document.getElementById('addRuleBtn').addEventListener('click', () => addMappingRow());
+
+    // Primary execution loop
     document.getElementById('runBtn').addEventListener('click', async () => {
-      if (!connectAPI) {
-        alert("Extension not correctly initialized in Trimble Connect iframe.");
+      if (!connectAPI) return;
+
+      const paramName = document.getElementById('paramName').value.trim();
+      const statusDiv = document.getElementById('status');
+      
+      // 1. Parse current mapping inputs from UI
+      const rows = document.querySelectorAll('.mapping-row');
+      const rules = Array.from(rows).map(row => ({
+        value: row.querySelector('.rule-val').value.trim(),
+        color: row.querySelector('.rule-color').value
+      })).filter(r => r.value !== ""); // Ignore blank rules
+
+      if (rules.length === 0) {
+        statusDiv.innerText = "Please specify at least one rule.";
         return;
       }
 
-      const paramName = document.getElementById('paramName').value.trim();
-      const targetValue = document.getElementById('targetValue').value.trim();
-      const chosenColor = document.getElementById('colorPicker').value;
-      
-      document.getElementById('status').innerText = "Scanning model objects...";
+      statusDiv.style.background = "#e6f7ff";
+      statusDiv.innerText = "Processing 3D model properties...";
 
       try {
-        // 1. Get all objects in the current view/model
+        // 2. Query total entity collection present in viewer canvas context
         const objects = await connectAPI.viewer.getObjects();
-        const matchingIds = [];
+        
+        // Initialize color buckets to group objects by color rules
+        const colorBuckets = {};
+        rules.forEach(r => { colorBuckets[r.color] = []; });
 
-        // 2. Loop through objects and request properties
+        let processedCount = 0;
+
+        // 3. Loop and cross-reference data values
         for (const obj of objects) {
           const properties = await connectAPI.viewer.getObjectProperties(obj.id);
           
-          // Drill into property sets to find our targeted parameter
           if (properties && properties.propertySets) {
-            let matchFound = false;
+            let matchedRule = null;
+            
             for (const pSet of properties.propertySets) {
               if (pSet.properties) {
-                const targetProp = pSet.properties.find(p => p.name === paramName);
-                if (targetProp && String(targetProp.value) === targetValue) {
-                  matchFound = true;
-                  break;
+                const targetProp = pSet.properties.find(p => p.name.toLowerCase() === paramName.toLowerCase());
+                if (targetProp) {
+                  // Standardize value string match check
+                  const actualValue = String(targetProp.value).trim();
+                  matchedRule = rules.find(r => r.value === actualValue);
+                  if (matchedRule) break;
                 }
               }
             }
-            if (matchFound) {
-              matchingIds.push(obj.id);
+            
+            if (matchedRule) {
+              colorBuckets[matchedRule.color].push(obj.id);
+              processedCount++;
             }
           }
         }
 
-        // 3. Apply color overrides to matching objects
-        if (matchingIds.length > 0) {
-          await connectAPI.viewer.setSelectionColors({
-            color: chosenColor,
-            objectIds: matchingIds
-          });
-          document.getElementById('status').innerText = `Success! Color applied to ${matchingIds.length} elements.`;
-        } else {
-          document.getElementById('status').innerText = "No matching objects found.";
+        // 4. Batch send color updates to Trimble Viewer engine
+        let executionPromises = [];
+        for (const colorHex in colorBuckets) {
+          const ids = colorBuckets[colorHex];
+          if (ids.length > 0) {
+            executionPromises.push(
+              connectAPI.viewer.setSelectionColors({
+                color: colorHex,
+                objectIds: ids
+              })
+            );
+          }
         }
 
+        await Promise.all(executionPromises);
+        statusDiv.style.background = "#f6ffed";
+        statusDiv.innerText = `Successfully processed ${processedCount} rebars.`;
+
       } catch (error) {
-        document.getElementById('status').innerText = "Error analyzing model properties.";
+        statusDiv.style.background = "#fff2f0";
+        statusDiv.innerText = "Execution failed. View console logs.";
         console.error(error);
       }
     });
 
-    // Start initialization when DOM loads
     window.addEventListener('DOMContentLoaded', initExtension);
   </script>
 </body>
