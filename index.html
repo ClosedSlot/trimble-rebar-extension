@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rebar Colorizer Extension</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 15px;
+      margin: 0;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    h3 { margin-top: 0; font-size: 16px; color: #111; }
+    .control-group {
+      margin-bottom: 12px;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+    label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px; }
+    input[type="text"], input[type="color"] {
+      width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #ccc; border-radius: 4px;
+    }
+    input[type="color"] { height: 35px; cursor: pointer; padding: 2px; }
+    button {
+      width: 100%; padding: 10px; background-color: #0275d8; color: white; border: none;
+      border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 5px;
+    }
+    button:hover { background-color: #025aa5; }
+    #status { font-size: 12px; color: #666; margin-top: 10px; text-align: center; }
+  </style>
+  
+  <script src="https://workspace-api.connect.trimble.com/v1/trimble.connect.workspace-api.js"></script>
+</head>
+<body>
+
+  <h3>Rebar Colorizer</h3>
+  <p style="font-size: 12px; color: #555;">Color elements matching specific parameter values.</p>
+
+  <div class="control-group">
+    <label for="paramName">Parameter Name to Scan:</label>
+    <input type="text" id="paramName" value="Size">
+  </div>
+
+  <div class="control-group">
+    <label for="targetValue">Target Value (e.g., #16 or 16mm):</label>
+    <input type="text" id="targetValue" value="#16">
+  </div>
+
+  <div class="control-group">
+    <label for="colorPicker">Color to Apply:</label>
+    <input type="color" id="colorPicker" value="#ff0000">
+  </div>
+
+  <button id="runBtn">Scan & Colorize</button>
+  <div id="status">Ready</div>
+
+  <script>
+    let connectAPI = null;
+
+    // Initialize Trimble Connect workspace interaction handshake
+    async function initExtension() {
+      try {
+        document.getElementById('status').innerText = "Connecting to Trimble Connect...";
+        connectAPI = await window.TrimbleConnectWorkspace.Interaction.initialize();
+        document.getElementById('status').innerText = "Connected to viewer.";
+      } catch (err) {
+        document.getElementById('status').innerText = "Failed to connect to host application.";
+        console.error(err);
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', async () => {
+      if (!connectAPI) {
+        alert("Extension not correctly initialized in Trimble Connect iframe.");
+        return;
+      }
+
+      const paramName = document.getElementById('paramName').value.trim();
+      const targetValue = document.getElementById('targetValue').value.trim();
+      const chosenColor = document.getElementById('colorPicker').value;
+      
+      document.getElementById('status').innerText = "Scanning model objects...";
+
+      try {
+        // 1. Get all objects in the current view/model
+        const objects = await connectAPI.viewer.getObjects();
+        const matchingIds = [];
+
+        // 2. Loop through objects and request properties
+        for (const obj of objects) {
+          const properties = await connectAPI.viewer.getObjectProperties(obj.id);
+          
+          // Drill into property sets to find our targeted parameter
+          if (properties && properties.propertySets) {
+            let matchFound = false;
+            for (const pSet of properties.propertySets) {
+              if (pSet.properties) {
+                const targetProp = pSet.properties.find(p => p.name === paramName);
+                if (targetProp && String(targetProp.value) === targetValue) {
+                  matchFound = true;
+                  break;
+                }
+              }
+            }
+            if (matchFound) {
+              matchingIds.push(obj.id);
+            }
+          }
+        }
+
+        // 3. Apply color overrides to matching objects
+        if (matchingIds.length > 0) {
+          await connectAPI.viewer.setSelectionColors({
+            color: chosenColor,
+            objectIds: matchingIds
+          });
+          document.getElementById('status').innerText = `Success! Color applied to ${matchingIds.length} elements.`;
+        } else {
+          document.getElementById('status').innerText = "No matching objects found.";
+        }
+
+      } catch (error) {
+        document.getElementById('status').innerText = "Error analyzing model properties.";
+        console.error(error);
+      }
+    });
+
+    // Start initialization when DOM loads
+    window.addEventListener('DOMContentLoaded', initExtension);
+  </script>
+</body>
+</html>
