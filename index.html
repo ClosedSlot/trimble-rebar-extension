@@ -73,11 +73,11 @@
 <body>
 
   <h3>Rebar Schedule Colorizer</h3>
-  <p class="subtitle">Assign distinct colors based on schedule numbers or property marks.</p>
+  <p class="subtitle">Assign distinct colors based on schedule marks</p>
 
   <div class="control-group">
     <label for="paramName">Property Target Parameter Name:</label>
-    <input type="text" id="paramName" value="Schedule Number">
+    <input type="text" id="paramName" value="Schedule Mark">
   </div>
 
   <label>Schedule Color Mappings:</label>
@@ -94,8 +94,8 @@
 
     // Default starting rules as requested
     const defaultRules = [
-      { value: "01", color: "#000000" }, // Black
-      { value: "02", color: "#ff0000" }  // Red
+      { value: "1", color: "#000000" }, // Black
+      { value: "2", color: "#ff0000" }  // Red
     ];
 
     // Initialize extension and UI rows
