@@ -5,4 +5,5 @@
   "description": "Colors rebar based on parameter values",
   "configCommand": "do_config",
   "enabled": true
+  "interactionContext": "viewer"
 }
