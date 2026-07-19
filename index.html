@@ -1,218 +1,211 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Rebar Schedule Colorizer</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      padding: 15px;
-      margin: 0;
-      background-color: #f4f5f7;
-      color: #333;
-    }
-    h3 { margin-top: 0; font-size: 16px; color: #111; margin-bottom: 5px; }
-    p.subtitle { font-size: 12px; color: #666; margin-bottom: 15px; }
-    
-    .control-group {
-      margin-bottom: 15px;
-      background: white;
-      padding: 12px;
-      border-radius: 6px;
-      border: 1px solid #dcdfe6;
-    }
-    label { display: block; font-size: 11px; font-weight: bold; color: #5a5e66; margin-bottom: 6px; text-transform: uppercase; }
-    input[type="text"] {
-      width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px;
-    }
-    
-    .mapping-container {
-      background: white;
-      border: 1px solid #dcdfe6;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 15px;
-    }
-    .mapping-row {
-      display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
-    }
-    .mapping-row input[type="text"] { flex: 2; }
-    .mapping-row input[type="color"] {
-      flex: 1; height: 34px; padding: 2px; border: 1px solid #dcdfe6; border-radius: 4px; cursor: pointer;
-    }
-    .remove-btn {
-      background: #ff4d4f; color: white; border: none; border-radius: 4px; width: 34px; height: 34px; font-weight: bold; cursor: pointer;
-    }
-    
-    .secondary-btn {
-      width: 100%; padding: 8px; background-color: #fff; color: #0275d8; border: 1px dashed #0275d8;
-      border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 15px;
-    }
-    .primary-btn {
-      width: 100%; padding: 12px; background-color: #0275d8; color: white; border: none;
-      border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;
-    }
-    .primary-btn:hover { background-color: #025aa5; }
-    
-    #status {
-      font-size: 12px; font-weight: 500; color: #0275d8; margin-top: 12px; text-align: center;
-      padding: 8px; border-radius: 4px; background: #e6f7ff;
-    }
-  </style>
+<meta charset="utf-8" />
+<title>Rebar Color by Schedule Mark</title>
+<script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    color: #222;
+    padding: 14px;
+  }
+  h3 { margin: 0 0 10px 0; font-size: 14px; }
+  .legend { display: flex; gap: 14px; margin: 10px 0 14px 0; flex-wrap: wrap; }
+  .legend div { display: flex; align-items: center; gap: 5px; }
+  .swatch {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 2px;
+    border: 1px solid #999;
+  }
+  button {
+    padding: 7px 14px;
+    margin-right: 8px;
+    margin-top: 4px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #f5f5f5;
+  }
+  button:hover { background: #ebebeb; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status {
+    margin-top: 12px;
+    color: #555;
+    white-space: pre-line;
+    min-height: 1.2em;
+  }
+</style>
 </head>
 <body>
+  <h3>Rebar coloring by "Schedule Mark"</h3>
 
-  <h3>Rebar Schedule Colorizer</h3>
-  <p class="subtitle">Assign distinct colors based on schedule numbers or property marks.</p>
-
-  <div class="control-group">
-    <label for="paramName">Property Target Parameter Name:</label>
-    <input type="text" id="paramName" value="Schedule Mark">
+  <div class="legend">
+    <div><span class="swatch" style="background:#000000"></span>1 = Black</div>
+    <div><span class="swatch" style="background:#e53935"></span>2 = Red</div>
+    <div><span class="swatch" style="background:#43a047"></span>3 = Green</div>
+    <div><span class="swatch" style="background:#1e88e5"></span>4 = Blue</div>
   </div>
 
-  <label>Schedule Color Mappings:</label>
-  <div id="mappingList" class="mapping-container"></div>
+  <button id="runBtn">Color rebars</button>
+  <button id="resetBtn">Reset colors</button>
+  <div id="status"></div>
 
-  <button type="button" class="secondary-btn" id="addRuleBtn">+ Add New Schedule Rule</button>
-  <button type="button" class="primary-btn" id="runBtn">Apply Colors to Model</button>
-  
-  <div id="status">Initializing handshake...</div>
+<script>
+// ---------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------
 
-  <script>
-    // EMBEDDED SDK HANDSHAKE (No external script downloading needed)
-    const TrimbleConnect = {
-      _requestId: 0,
-      _pendingPromises: {},
-      
-      init: function() {
-        return new Promise((resolve) => {
-          window.addEventListener("message", (event) => {
-            // Intercept data responses matching our request IDs
-            if (event.data && event.data.requestId && this._pendingPromises[event.data.requestId]) {
-              this._pendingPromises[event.data.requestId](event.data.payload);
-              delete this._pendingPromises[event.data.requestId];
-            }
-          });
-          
-          // Force active UI state on local load
-          document.getElementById('status').innerText = "Connected to viewer panel.";
-          document.getElementById('status').style.background = "#f6ffed";
-          document.getElementById('status').style.color = "#52c41a";
-          resolve();
-        });
-      },
+// The exact property name to read. Matching is case-insensitive.
+const PROPERTY_NAME = "Schedule Mark";
 
-      // Helper function to send messages to Trimble parent window
-      sendRequest: function(action, payload = {}) {
-        this._requestId++;
-        const id = "req-" + this._requestId;
-        return new Promise((resolve) => {
-          this._pendingPromises[id] = resolve;
-          window.parent.postMessage({
-            module: "viewer",
-            action: action,
-            requestId: id,
-            args: payload
-          }, "*");
-        });
+// Optional: restrict scanning to a specific object class for speed on
+// large models, e.g. "IFCREINFORCINGBAR". Leave "" to scan every object
+// (safe default, since only rebar will actually carry a Schedule Mark).
+const CLASS_FILTER = "";
+
+// Batch size for getObjectProperties calls (keeps payloads reasonable).
+const CHUNK_SIZE = 300;
+
+// Schedule Mark value -> RGBA color (0-255 per channel).
+const COLOR_MAP = {
+  "1": { r: 0,   g: 0,   b: 0,   a: 255 }, // Black
+  "2": { r: 229, g: 57,  b: 53,  a: 255 }, // Red
+  "3": { r: 67,  g: 160, b: 71,  a: 255 }, // Green
+  "4": { r: 30,  g: 136, b: 229, a: 255 }, // Blue
+};
+
+// ---------------------------------------------------------------------
+
+let API;
+const statusEl = document.getElementById("status");
+const runBtn = document.getElementById("runBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+function log(msg) {
+  statusEl.textContent = msg;
+  console.log(msg);
+}
+
+async function init() {
+  try {
+    API = await TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+      // Handle extension.command / accessToken events here if needed later.
+    });
+    log("Connected. Ready.");
+  } catch (err) {
+    log("Failed to connect to Trimble Connect: " + err.message);
+  }
+}
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Looks through every property set on an object for a property whose
+// name matches PROPERTY_NAME (case-insensitive) and returns its value.
+function findScheduleMark(objectProperties) {
+  const sets = objectProperties.properties || [];
+  for (const set of sets) {
+    const props = set.properties || [];
+    for (const p of props) {
+      if (p.name && p.name.trim().toLowerCase() === PROPERTY_NAME.toLowerCase()) {
+        return String(p.value).trim();
       }
-    };
+    }
+  }
+  return null;
+}
 
-    function addMappingRow(value = "", color = "#000000") {
-      const container = document.getElementById('mappingList');
-      const row = document.createElement('div');
-      row.className = 'mapping-row';
-      row.innerHTML = `
-        <input type="text" class="rule-val" placeholder="Value" value="${value}">
-        <input type="color" class="rule-color" value="${color}">
-        <button type="button" class="remove-btn">×</button>
-      `;
-      row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
-      container.appendChild(row);
+async function colorRebars() {
+  runBtn.disabled = true;
+  try {
+    const models = await API.viewer.getModels("loaded");
+    if (!models.length) {
+      log("No loaded models found. Load a model in the viewer first.");
+      return;
     }
 
-    document.getElementById('addRuleBtn').addEventListener('click', () => addMappingRow());
+    let totalColored = 0;
+    let totalScanned = 0;
 
-    document.getElementById('runBtn').addEventListener('click', async () => {
-      const paramName = document.getElementById('paramName').value.trim();
-      const statusDiv = document.getElementById('status');
-      
-      const rows = document.querySelectorAll('.mapping-row');
-      const rules = Array.from(rows).map(row => ({
-        value: row.querySelector('.rule-val').value.trim(),
-        color: row.querySelector('.rule-color').value
-      })).filter(r => r.value !== "");
+    for (const model of models) {
+      log(`Scanning "${model.name || model.id}"...`);
 
-      if (rules.length === 0) {
-        statusDiv.innerText = "Please specify at least one rule.";
-        return;
+      const selector = { modelObjectIds: [{ modelId: model.id }] };
+      if (CLASS_FILTER) selector.parameter = { class: CLASS_FILTER };
+
+      const objectsRes = await API.viewer.getObjects(selector);
+      const modelEntry = objectsRes.find((o) => o.modelId === model.id);
+      if (!modelEntry || !modelEntry.objects.length) continue;
+
+      const runtimeIds = modelEntry.objects.map((o) => o.id);
+      totalScanned += runtimeIds.length;
+
+      const groups = { "1": [], "2": [], "3": [], "4": [] };
+
+      for (const idBatch of chunkArray(runtimeIds, CHUNK_SIZE)) {
+        const propsRes = await API.viewer.getObjectProperties(model.id, idBatch);
+        for (const obj of propsRes) {
+          const mark = findScheduleMark(obj);
+          if (mark && groups[mark]) groups[mark].push(obj.id);
+        }
       }
 
-      statusDiv.style.background = "#e6f7ff";
-      statusDiv.style.color = "#0275d8";
-      statusDiv.innerText = "Scanning objects and matching properties...";
-
-      try {
-        // Query model items via parent viewport tunnel link
-        const objects = await TrimbleConnect.sendRequest("getObjects");
-        if (!objects || !Array.isArray(objects)) {
-          statusDiv.innerText = "No model objects detected or visible.";
-          return;
-        }
-
-        const colorBuckets = {};
-        rules.forEach(r => { colorBuckets[r.color] = []; });
-        let matchCount = 0;
-
-        for (const obj of objects) {
-          const properties = await TrimbleConnect.sendRequest("getObjectProperties", { id: obj.id });
-          if (properties && properties.propertySets) {
-            let matchedRule = null;
-            for (const pSet of properties.propertySets) {
-              if (pSet.properties) {
-                const targetProp = pSet.properties.find(p => p.name.toLowerCase() === paramName.toLowerCase());
-                if (targetProp) {
-                  const actualValue = String(targetProp.value).trim();
-                  matchedRule = rules.find(r => r.value === actualValue);
-                  if (matchedRule) break;
-                }
-              }
-            }
-            if (matchedRule) {
-              colorBuckets[matchedRule.color].push(obj.id);
-              matchCount++;
-            }
-          }
-        }
-
-        // Apply visual batch color changes
-        for (const colorHex in colorBuckets) {
-          const ids = colorBuckets[colorHex];
-          if (ids.length > 0) {
-            await TrimbleConnect.sendRequest("setSelectionColors", {
-              color: colorHex,
-              objectIds: ids
-            });
-          }
-        }
-
-        statusDiv.style.background = "#f6ffed";
-        statusDiv.style.color = "#52c41a";
-        statusDiv.innerText = `Successfully processed ${matchCount} rebars.`;
-
-      } catch (err) {
-        statusDiv.style.background = "#fff2f0";
-        statusDiv.style.color = "#ff4d4f";
-        statusDiv.innerText = "Scan processing encountered an error.";
-        console.error(err);
+      for (const mark of Object.keys(groups)) {
+        const ids = groups[mark];
+        if (!ids.length) continue;
+        await API.viewer.setObjectState(
+          { modelObjectIds: [{ modelId: model.id, objectRuntimeIds: ids }] },
+          { color: COLOR_MAP[mark] }
+        );
+        totalColored += ids.length;
       }
-    });
+    }
 
-    window.addEventListener('DOMContentLoaded', () => {
-      TrimbleConnect.init();
-      addMappingRow("1", "#000000");
-      addMappingRow("2", "#ff0000");
-    });
-  </script>
+    log(`Done. Scanned ${totalScanned} object(s), colored ${totalColored} rebar object(s) with a Schedule Mark of 1-4.`);
+  } catch (err) {
+    console.error(err);
+    log("Error: " + err.message);
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+async function resetColors() {
+  resetBtn.disabled = true;
+  try {
+    log("Resetting colors...");
+    const colored = await API.viewer.getColoredObjects();
+    for (const entry of colored) {
+      if (!entry.objects.length) continue;
+      await API.viewer.setObjectState(
+        {
+          modelObjectIds: [
+            { modelId: entry.modelId, objectRuntimeIds: entry.objects.map((o) => o.id) },
+          ],
+        },
+        { color: "reset" }
+      );
+    }
+    log("Colors reset.");
+  } catch (err) {
+    console.error(err);
+    log("Error: " + err.message);
+  } finally {
+    resetBtn.disabled = false;
+  }
+}
+
+runBtn.addEventListener("click", colorRebars);
+resetBtn.addEventListener("click", resetColors);
+
+init();
+</script>
 </body>
 </html>
