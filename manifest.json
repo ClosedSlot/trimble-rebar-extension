@@ -1,8 +1,6 @@
 {
-  "icon": "https://img.icons8.com/ios-filled/50/000000/color-palette.png",
-  "title": "Rebar Schedule Number Colorizer",
-  "url": "https://closedslot.github.io/trimble-rebar-extension/index.html",
-  "description": "Colors rebar based on parameter values",
-  "configCommand": "do_config",
-  "enabled": true
+  "url": "https://your-domain.example.com/rebar-color-extension/index.html",
+  "title": "Rebar Color by Schedule Mark",
+  "icon": "https://your-domain.example.com/rebar-color-extension/icon.png",
+  "description": "Colors rebar objects in the 3D viewer based on their 'Schedule Mark' parameter (1=Black, 2=Red, 3=Green, 4=Blue)."
 }
