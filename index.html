@@ -137,14 +137,25 @@ async function colorRebars() {
     for (const model of models) {
       log(`Scanning "${model.name || model.id}"...`);
 
-      const selector = { modelObjectIds: [{ modelId: model.id }] };
+      // Build a selector. If a class filter is set, apply it; otherwise
+      // fetch everything for this model explicitly with recursive:true
+      // so nested/child objects are included too.
+      const selector = {
+        modelObjectIds: [{ modelId: model.id, recursive: true }],
+      };
       if (CLASS_FILTER) selector.parameter = { class: CLASS_FILTER };
 
       const objectsRes = await API.viewer.getObjects(selector);
-      const modelEntry = objectsRes.find((o) => o.modelId === model.id);
-      if (!modelEntry || !modelEntry.objects.length) continue;
+      console.log("getObjects result for", model.id, objectsRes);
 
-      const runtimeIds = modelEntry.objects.map((o) => o.id);
+      const modelEntry = (objectsRes || []).find((o) => o.modelId === model.id);
+      const runtimeIds = (modelEntry && modelEntry.objects || []).map((o) => o.id);
+
+      if (!runtimeIds.length) {
+        log(`No matching objects found in "${model.name || model.id}". See console for the raw API response.`);
+        continue;
+      }
+
       totalScanned += runtimeIds.length;
 
       const groups = { "1": [], "2": [], "3": [], "4": [] };
@@ -182,8 +193,8 @@ async function resetColors() {
   try {
     log("Resetting colors...");
     const colored = await API.viewer.getColoredObjects();
-    for (const entry of colored) {
-      if (!entry.objects.length) continue;
+    for (const entry of colored || []) {
+      if (!entry.objects || !entry.objects.length) continue;
       await API.viewer.setObjectState(
         {
           modelObjectIds: [
